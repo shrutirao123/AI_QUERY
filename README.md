@@ -50,7 +50,7 @@ It even **auto-joins `company_masters`** with purchase/sales documents to show c
 
 #### 1️⃣ Clone Repository
 ```bash
-git clone https://github.com/yourusername/AI-Data-Query-Assistant.git
+git clone https://github.com/shrutirao123/AI_QUERY.git
 cd \AI DATA QUERY ASSI
 
 
