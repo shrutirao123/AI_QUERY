@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <title>AI Data Query Assistant</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+  <style>
+    body {
+      background-color: #f8f9fa;
+      display: flex;
+      min-height: 100vh;
+    }
+
+    .sidebar {
+      width: 250px;
+      background: #212529;
+      color: white;
+      padding: 20px;
+      box-shadow: 2px 0 8px rgba(0, 0, 0, 0.2);
+    }
+
+    .sidebar h5 {
+      color: #00c6ff;
+      margin-bottom: 15px;
+    }
+
+    .sidebar .history {
+      max-height: 300px;
+      overflow-y: auto;
+    }
+
+    .content {
+      flex: 1;
+      padding: 30px;
+    }
+
+    .card {
+      box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+      border-radius: 12px;
+    }
+
+    pre {
+      background: #212529;
+      color: #00ff88;
+      padding: 10px;
+      border-radius: 6px;
+    }
+
+    .no-history {
+      color: #fffefe;
+      font-style: italic;
+      font-size: 14px;
+      text-align: center;
+      margin-top: 10px;
+    }
+
+    .spinner-border {
+      display: none;
+    }
+  </style>
+</head>
+
+<body>
+  <!-- Sidebar -->
+  <div class="sidebar">
+    <h5>⚡ Select Table</h5>
+    <form method="POST" action="/set_table" class="mb-3">
+      <select name="table_name" class="form-select mb-2">
+        {% for t in tables %}
+        <option value="{{ t }}" {% if t==selected_table %}selected{% endif %}>
+          {{ table_display[t] if t in table_display else t }}
+        </option>
+        {% endfor %}
+      </select>
+      <button class="btn btn-success w-100" type="submit">Apply</button>
+    </form>
+
+    <h5>📝 Last Asked</h5>
+    <div class="history mb-3">
+      {% if session['history'] %}
+      <ul class="list-group">
+        {% for q in session['history'] %}
+        <li class="list-group-item list-group-item-dark small">{{ q }}</li>
+        {% endfor %}
+      </ul>
+      {% else %}
+      <p class="no-history">No history yet...</p>
+      {% endif %}
+    </div>
+
+    <!-- ✅ Clear History Button -->
+    {% if session['history'] %}
+    <form method="POST" action="/clear_history">
+      <button class="btn btn-sm btn-outline-danger w-100 font-style-bold">🗑️ Clear History</button>
+    </form>
+    {% endif %}
+  </div>
+
+
+  <!-- Main Content -->
+  <div class="content">
+    <div class="card p-4">
+      <h2 class="text-center mb-3">🤖 AI-Powered Data Query Assistant</h2>
+
+      <!-- Search Form -->
+      <form method="POST" action="/ask" onsubmit="showLoader()">
+        <div class="input-group mb-3">
+          <input type="text" class="form-control" name="question" placeholder="Ask a question about sales data...">
+          <button class="btn btn-primary" type="submit">Ask</button>
+          <button type="button" class="btn btn-outline-danger" onclick="clearResults()">Clear</button>
+        </div>
+      </form>
+      <!-- Modal for confirmation -->
+      <div class="modal fade" id="tableModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-sm modal-dialog-centered">
+          <div class="modal-content p-3">
+            <div class="modal-body">
+              <p id="modalText"></p>
+              <div class="text-end">
+                <button class="btn btn-primary" data-bs-dismiss="modal">OK</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Loader -->
+      <div class="text-center">
+        <div class="spinner-border text-primary" role="status" id="loader">
+          <span class="visually-hidden">Loading...</span>
+        </div>
+      </div>
+
+      <div id="results">
+        {% if query %}
+        <div class="mt-4">
+          <h5>📝 Your Question:</h5>
+          <p>{{ query }}</p>
+
+          <h5>🖥 Generated SQL:</h5>
+          <div class="position-relative">
+            <pre id="sqlQuery">{{ sql }}</pre>
+            <button class="btn btn-sm btn-outline-secondary position-absolute top-0 end-0 m-2" onclick="copySQL()">📋
+              Copy</button>
+          </div>
+          {% endif %}
+
+          {% if rows %}
+          <div class="mt-4">
+            <h5>📊 Expected Results:</h5>
+            <form method="POST" action="/export" class="mb-3">
+              <button class="btn btn-outline-success btn-sm">⬇️ Export to Excel</button>
+            </form>
+            <table class="table table-striped table-bordered">
+              <thead class="table-dark">
+                <tr>
+                  {% for key in rows[0].keys() %}
+                  <th>{{ key }}</th>
+                  {% endfor %}
+                </tr>
+              </thead>
+              <tbody>
+                {% for row in rows %}
+                <tr>
+                  {% for val in row.values() %}
+                  <td>{{ val }}</td>
+                  {% endfor %}
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+          {% endif %}
+
+          {% if error %}
+          <div class="alert alert-danger mt-3">⚠️ Error: {{ error }}</div>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+      // Flask flash messages
+      var flashMessage = "{{ get_flashed_messages()|first|default('') }}";
+      if (flashMessage) {
+        var modal = new bootstrap.Modal(document.getElementById('tableModal'));
+        document.getElementById('modalText').innerText = flashMessage;
+        modal.show();
+      }
+      function showLoader() {
+        document.getElementById("loader").style.display = "inline-block";
+      }
+
+      function clearResults() {
+        document.getElementById("results").innerHTML = "";
+      }
+      function copySQL() {
+        const sqlText = document.getElementById("sqlQuery").innerText;
+        navigator.clipboard.writeText(sqlText).then(() => {
+          alert("✅ SQL copied to clipboard!");
+        });
+      }
+    </script>
+
+</body>
+
+</html>
